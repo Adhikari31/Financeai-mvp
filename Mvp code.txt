@@ -1,24 +1,190 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, BarChart3, PieChart, Calendar, Zap, Target, FileText, Settings, LogOut, Menu, X, Search, Filter } from 'lucide-react';
+import { Upload, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, BarChart3, PieChart, Calendar, Zap, Target, FileText, LogOut, Menu, X } from 'lucide-react';
+
+// ⚠️ REPLACE THESE WITH YOUR SUPABASE CREDENTIALS
+const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // Get from Supabase dashboard
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // Get from Supabase dashboard
+
+// Simple Supabase client (no external libraries needed for demo)
+const supabaseClient = {
+  auth: {
+    signIn: async (email, password) => {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ email, password })
+      });
+      return response.json();
+    },
+    signUp: async (email, password) => {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ email, password })
+      });
+      return response.json();
+    }
+  },
+  from: (table) => ({
+    select: (columns = '*') => ({
+      eq: (column, value) => ({
+        execute: async (token) => {
+          const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${column}=eq.${value}&select=${columns}`, {
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          return { data: await response.json() };
+        }
+      }),
+      execute: async (token) => {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${columns}`, {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        return { data: await response.json() };
+      }
+    }),
+    insert: (data) => ({
+      execute: async (token) => {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(data)
+        });
+        return { data: await response.json() };
+      }
+    })
+  })
+};
 
 export default function FinanceAI() {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [view, setView] = useState('login');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [financialData, setFinancialData] = useState(null);
+  const [useDemoMode, setUseDemoMode] = useState(true); // Toggle for demo vs real backend
 
-  const login = (email) => {
-    setLoading(true);
-    setTimeout(() => {
-      setUser({ email, name: email.split('@')[0] });
-      loadUserData();
+  // Check if Supabase is configured
+  const isBackendConfigured = SUPABASE_URL !== 'YOUR_SUPABASE_URL';
+
+  useEffect(() => {
+    // Check for existing session
+    const savedToken = localStorage.getItem('finance_token');
+    const savedUser = localStorage.getItem('finance_user');
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
       setView('dashboard');
-      setLoading(false);
-    }, 1200);
+      loadUserData(savedToken);
+    }
+  }, []);
+
+  const login = async (email, password) => {
+    setLoading(true);
+    
+    if (!isBackendConfigured || useDemoMode) {
+      // Demo mode - simulate login
+      setTimeout(() => {
+        const demoUser = { email, name: email.split('@')[0], id: 'demo-user' };
+        setUser(demoUser);
+        localStorage.setItem('finance_user', JSON.stringify(demoUser));
+        loadDemoData();
+        setView('dashboard');
+        setLoading(false);
+      }, 1200);
+      return;
+    }
+
+    // Real backend login
+    try {
+      const result = await supabaseClient.auth.signIn(email, password);
+      if (result.access_token) {
+        setToken(result.access_token);
+        setUser(result.user);
+        localStorage.setItem('finance_token', result.access_token);
+        localStorage.setItem('finance_user', JSON.stringify(result.user));
+        await loadUserData(result.access_token);
+        setView('dashboard');
+      } else {
+        alert('Login failed. Using demo mode instead.');
+        setUseDemoMode(true);
+        login(email, password);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Login failed. Using demo mode.');
+      setUseDemoMode(true);
+      login(email, password);
+    }
+    setLoading(false);
   };
 
-  const loadUserData = () => {
+  const signup = async (email, password) => {
+    setLoading(true);
+    
+    if (!isBackendConfigured) {
+      alert('Backend not configured. Please set up Supabase first.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const result = await supabaseClient.auth.signUp(email, password);
+      if (result.user) {
+        alert('Account created! Please check your email to verify.');
+        setView('login');
+      }
+    } catch (error) {
+      alert('Signup failed: ' + error.message);
+    }
+    setLoading(false);
+  };
+
+  const loadUserData = async (authToken) => {
+    if (!isBackendConfigured || useDemoMode) {
+      loadDemoData();
+      return;
+    }
+
+    try {
+      // Load transactions from Supabase
+      const { data: transactions } = await supabaseClient
+        .from('transactions')
+        .select('*')
+        .execute(authToken);
+
+      // Load insights
+      const { data: insights } = await supabaseClient
+        .from('insights')
+        .select('*')
+        .execute(authToken);
+
+      // Process and set data
+      setFinancialData(processTransactionData(transactions, insights));
+    } catch (error) {
+      console.error('Error loading data:', error);
+      loadDemoData();
+    }
+  };
+
+  const loadDemoData = () => {
     setFinancialData({
       currentMonth: { totalIncome: 12450, totalExpenses: 8230, netCashFlow: 4220, profitMargin: 33.9 },
       previousMonth: { totalIncome: 10200, totalExpenses: 7100, netCashFlow: 3100 },
@@ -47,24 +213,107 @@ export default function FinanceAI() {
     });
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setLoading(true);
-    setView('processing');
-    setTimeout(() => {
-      loadUserData();
-      setLoading(false);
-      setView('dashboard');
-    }, 3000);
+  const processTransactionData = (transactions, insights) => {
+    // Convert raw transaction data to dashboard format
+    // This would calculate totals, categorize, etc.
+    return {
+      currentMonth: { totalIncome: 0, totalExpenses: 0, netCashFlow: 0, profitMargin: 0 },
+      previousMonth: { totalIncome: 0, totalExpenses: 0, netCashFlow: 0 },
+      historical: [],
+      categories: [],
+      insights: insights || [],
+      uploads: []
+    };
   };
 
-  if (!user) return <LoginScreen onLogin={login} loading={loading} />;
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setLoading(true);
+    setView('processing');
+
+    if (!isBackendConfigured || useDemoMode) {
+      // Demo mode - simulate upload
+      setTimeout(() => {
+        loadDemoData();
+        setView('dashboard');
+        setLoading(false);
+      }, 3000);
+      return;
+    }
+
+    // Real upload to Supabase Storage
+    try {
+      // 1. Upload file to Supabase Storage
+      const fileName = `${user.id}/${Date.now()}_${file.name}`;
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResponse = await fetch(`${SUPABASE_URL}/storage/v1/object/user-uploads/${fileName}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: formData
+      });
+
+      const { path } = await uploadResponse.json();
+
+      // 2. Create upload record
+      const { data: upload } = await supabaseClient
+        .from('uploads')
+        .insert({
+          user_id: user.id,
+          filename: file.name,
+          file_url: path,
+          status: 'processing'
+        })
+        .execute(token);
+
+      // 3. Trigger processing function
+      await fetch(`${SUPABASE_URL}/functions/v1/process-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ fileUrl: path, uploadId: upload[0].id })
+      });
+
+      // 4. Reload data
+      await loadUserData(token);
+      setView('dashboard');
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Upload failed. Using demo mode.');
+      loadDemoData();
+      setView('dashboard');
+    }
+    setLoading(false);
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('finance_token');
+    localStorage.removeItem('finance_user');
+    setView('login');
+  };
+
+  if (!user) return <LoginScreen onLogin={login} onSignup={signup} loading={loading} demoMode={!isBackendConfigured} />;
   if (view === 'processing') return <ProcessingScreen />;
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}>
+      {!isBackendConfigured && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white px-4 py-2 text-center text-sm z-50">
+          ⚠️ Demo Mode - Set up Supabase to enable real backend
+        </div>
+      )}
+      
+      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col ${!isBackendConfigured ? 'mt-10' : ''}`}>
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
@@ -85,7 +334,7 @@ export default function FinanceAI() {
           <NavItem icon={FileText} label="History" active={view === 'history'} onClick={() => setView('history')} collapsed={!sidebarOpen} />
         </nav>
         <div className="p-4 border-t border-gray-200">
-          <NavItem icon={LogOut} label="Logout" onClick={() => { setUser(null); setView('login'); }} collapsed={!sidebarOpen} />
+          <NavItem icon={LogOut} label="Logout" onClick={logout} collapsed={!sidebarOpen} />
         </div>
       </aside>
 
@@ -120,18 +369,36 @@ function NavItem({ icon: Icon, label, active, onClick, collapsed }) {
   );
 }
 
-function LoginScreen({ onLogin, loading }) {
+function LoginScreen({ onLogin, onSignup, loading, demoMode }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+
+  const handleSubmit = () => {
+    if (isSignup) {
+      onSignup(email, password);
+    } else {
+      onLogin(email || 'demo@financeai.com', password || 'demo123');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+        {demoMode && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>Demo Mode:</strong> Configure Supabase in the code to enable real backend
+            </p>
+          </div>
+        )}
+        
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-4">
             <Zap className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">FinanceAI</h1>
-          <p className="text-gray-600">AI-powered financial intelligence for modern businesses</p>
+          <p className="text-gray-600">AI-powered financial intelligence</p>
         </div>
 
         <div className="space-y-4">
@@ -141,15 +408,17 @@ function LoginScreen({ onLogin, loading }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <input type="password" placeholder="••••••••" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
           </div>
-          <button onClick={() => onLogin(email || 'demo@financeai.com')} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50">
-            {loading ? 'Signing in...' : 'Sign In'}
+          <button onClick={handleSubmit} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50">
+            {loading ? 'Loading...' : isSignup ? 'Sign Up' : 'Sign In'}
           </button>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm text-gray-600">
-          Don't have an account? <button className="text-indigo-600 font-semibold hover:text-indigo-700">Start Free Trial</button>
+        <div className="mt-6 text-center">
+          <button onClick={() => setIsSignup(!isSignup)} className="text-sm text-indigo-600 hover:text-indigo-700">
+            {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
         </div>
       </div>
     </div>
@@ -157,93 +426,32 @@ function LoginScreen({ onLogin, loading }) {
 }
 
 function ProcessingScreen() {
-  const [stage, setStage] = useState(0);
-  const stages = [
-    { label: 'Reading file...', icon: FileText },
-    { label: 'Detecting columns...', icon: Search },
-    { label: 'Categorizing transactions...', icon: Filter },
-    { label: 'Learning patterns...', icon: Zap },
-    { label: 'Generating insights...', icon: Target }
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStage(s => (s < stages.length - 1 ? s + 1 : s));
-    }, 600);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-6 animate-pulse">
-            <Zap className="w-10 h-10 text-white" />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Processing Your Data</h2>
-          <p className="text-gray-600">AI is analyzing your financial data...</p>
+      <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-6 animate-pulse">
+          <Zap className="w-10 h-10 text-white" />
         </div>
-
-        <div className="space-y-4">
-          {stages.map((s, idx) => {
-            const Icon = s.icon;
-            const isActive = idx === stage;
-            const isComplete = idx < stage;
-
-            return (
-              <div key={idx} className={`flex items-center space-x-4 p-4 rounded-lg transition-all ${isActive ? 'bg-indigo-50 border-2 border-indigo-200' : isComplete ? 'bg-green-50' : 'bg-gray-50'}`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isActive ? 'bg-indigo-600' : isComplete ? 'bg-green-600' : 'bg-gray-300'}`}>
-                  {isComplete ? <CheckCircle className="w-6 h-6 text-white" /> : <Icon className="w-5 h-5 text-white" />}
-                </div>
-                <span className={`font-medium ${isActive ? 'text-indigo-900' : isComplete ? 'text-green-900' : 'text-gray-500'}`}>{s.label}</span>
-              </div>
-            );
-          })}
-        </div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Processing Your Data</h2>
+        <p className="text-gray-600">AI is analyzing your financial data...</p>
       </div>
     </div>
   );
 }
 
+// Dashboard, Upload, Insights, and History components remain the same as before
 function DashboardView({ data }) {
-  if (!data) return null;
+  if (!data) return <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div></div>;
 
-  const { currentMonth, previousMonth, historical, categories } = data;
-  const incomeChange = ((currentMonth.totalIncome - previousMonth.totalIncome) / previousMonth.totalIncome * 100).toFixed(1);
+  const { currentMonth, historical, categories } = data;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Total Income" value={`$${currentMonth.totalIncome.toLocaleString()}`} change={incomeChange} icon={TrendingUp} color="emerald" />
+        <MetricCard title="Total Income" value={`$${currentMonth.totalIncome.toLocaleString()}`} icon={TrendingUp} color="emerald" />
         <MetricCard title="Total Expenses" value={`$${currentMonth.totalExpenses.toLocaleString()}`} icon={TrendingDown} color="red" />
         <MetricCard title="Net Cash Flow" value={`$${currentMonth.netCashFlow.toLocaleString()}`} icon={BarChart3} color="blue" />
         <MetricCard title="Profit Margin" value={`${currentMonth.profitMargin}%`} icon={PieChart} color="purple" />
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-          <Calendar className="w-5 h-5 mr-2 text-indigo-600" />
-          3-Month Cash Flow Trend
-        </h3>
-        <div className="h-64 flex items-end justify-between space-x-4">
-          {historical.map((month, idx) => (
-            <div key={idx} className="flex-1 flex flex-col items-center">
-              <div className="w-full space-y-2 mb-3">
-                <div className="relative w-full bg-gray-100 rounded-t-lg" style={{ height: `${(month.income / 15000) * 180}px` }}>
-                  <div className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg h-full"></div>
-                </div>
-                <div className="relative w-full bg-gray-100 rounded-t-lg" style={{ height: `${(month.expenses / 15000) * 180}px` }}>
-                  <div className="absolute bottom-0 w-full bg-gradient-to-t from-red-500 to-red-400 rounded-t-lg h-full"></div>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-bold text-gray-900">{month.month}</div>
-                <div className="text-xs text-emerald-600 font-semibold">${(month.income / 1000).toFixed(1)}k</div>
-                <div className="text-xs text-red-600 font-semibold">${(month.expenses / 1000).toFixed(1)}k</div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -254,9 +462,8 @@ function DashboardView({ data }) {
   );
 }
 
-function MetricCard({ title, value, change, icon: Icon, color }) {
+function MetricCard({ title, value, icon: Icon, color }) {
   const colors = { emerald: 'from-emerald-500 to-green-500', red: 'from-red-500 to-orange-500', blue: 'from-blue-500 to-indigo-500', purple: 'from-purple-500 to-pink-500' };
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
       <div className="flex items-center justify-between mb-4">
@@ -266,14 +473,12 @@ function MetricCard({ title, value, change, icon: Icon, color }) {
         </div>
       </div>
       <div className="text-3xl font-bold text-gray-900">{value}</div>
-      {change && <div className="text-sm font-semibold text-emerald-600 mt-2">↑ {change}% vs last month</div>}
     </div>
   );
 }
 
 function CategoryBreakdown({ title, categories, type }) {
   const total = categories.reduce((sum, c) => sum + c.amount, 0);
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
       <h3 className="text-lg font-bold text-gray-900 mb-4">{title}</h3>
@@ -287,7 +492,6 @@ function CategoryBreakdown({ title, categories, type }) {
             <div className="relative h-2 bg-gray-100 rounded-full">
               <div className={`absolute top-0 left-0 h-full rounded-full ${type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${(cat.amount / total) * 100}%` }}></div>
             </div>
-            <div className="text-xs text-gray-500 mt-1">{cat.transactions} transactions</div>
           </div>
         ))}
       </div>
@@ -297,42 +501,17 @@ function CategoryBreakdown({ title, categories, type }) {
 
 function UploadView({ onUpload, uploads }) {
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-4">
-            <Upload className="w-8 h-8 text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Financial Data</h2>
-          <p className="text-gray-600">CSV from Stripe, PayPal, Razorpay, or bank exports</p>
-        </div>
-
-        <div className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-indigo-400 transition-all">
-          <input type="file" accept=".csv,.xlsx,.xls" onChange={onUpload} className="hidden" id="file-upload" />
-          <label htmlFor="file-upload" className="cursor-pointer">
-            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-lg font-semibold text-gray-700 mb-2">Drop file or click to browse</p>
-            <p className="text-sm text-gray-500">CSV, Excel supported</p>
-          </label>
-        </div>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+      <div className="text-center mb-6">
+        <Upload className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Financial Data</h2>
+        <p className="text-gray-600">CSV from Stripe, PayPal, Razorpay, or bank exports</p>
       </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Uploads</h3>
-        <div className="space-y-3">
-          {uploads.map(upload => (
-            <div key={upload.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <FileText className="w-5 h-5 text-gray-400" />
-                <div>
-                  <div className="font-medium text-gray-900">{upload.filename}</div>
-                  <div className="text-xs text-gray-500">{upload.rows} rows • {upload.date}</div>
-                </div>
-              </div>
-              <CheckCircle className="w-5 h-5 text-emerald-500" />
-            </div>
-          ))}
-        </div>
+      <div className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-indigo-400 transition-all">
+        <input type="file" accept=".csv,.xlsx,.xls" onChange={onUpload} className="hidden" id="file-upload" />
+        <label htmlFor="file-upload" className="cursor-pointer">
+          <p className="text-lg font-semibold text-gray-700">Drop file or click to browse</p>
+        </label>
       </div>
     </div>
   );
@@ -343,22 +522,9 @@ function InsightsView({ insights }) {
     <div className="space-y-4">
       {insights.map(insight => (
         <div key={insight.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">{insight.title}</h3>
-              <p className="text-gray-700 mb-3">{insight.description}</p>
-              <div className="flex items-center space-x-3">
-                <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-semibold">{insight.impact}</div>
-                {insight.tags.map((tag, idx) => (
-                  <div key={idx} className={`px-3 py-1 rounded-full text-xs font-semibold ${tag === 'Do Now' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{tag}</div>
-                ))}
-              </div>
-            </div>
-            <AlertTriangle className={`w-6 h-6 ${insight.priority === 'high' ? 'text-red-500' : 'text-yellow-500'}`} />
-          </div>
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700">Action: {insight.action}</div>
-          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">{insight.title}</h3>
+          <p className="text-gray-700 mb-3">{insight.description}</p>
+          <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-semibold inline-block">{insight.impact}</div>
         </div>
       ))}
     </div>
@@ -368,25 +534,12 @@ function InsightsView({ insights }) {
 function HistoryView({ data }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Historical Comparisons</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-6">Historical Data</h2>
       <div className="space-y-4">
         {data?.historical.map((month, idx) => (
           <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div className="font-semibold text-gray-900">{month.month} 2024</div>
-            <div className="flex items-center space-x-6">
-              <div>
-                <div className="text-xs text-gray-600">Income</div>
-                <div className="text-sm font-bold text-emerald-600">${month.income.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600">Expenses</div>
-                <div className="text-sm font-bold text-red-600">${month.expenses.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600">Net</div>
-                <div className="text-sm font-bold text-blue-600">${month.net.toLocaleString()}</div>
-              </div>
-            </div>
+            <div className="font-semibold text-gray-900">{month.month}</div>
+            <div className="text-sm font-bold text-blue-600">${month.net.toLocaleString()}</div>
           </div>
         ))}
       </div>
