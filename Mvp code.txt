@@ -1,0 +1,395 @@
+import React, { useState, useEffect } from 'react';
+import { Upload, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, BarChart3, PieChart, Calendar, Zap, Target, FileText, Settings, LogOut, Menu, X, Search, Filter } from 'lucide-react';
+
+export default function FinanceAI() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('login');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [financialData, setFinancialData] = useState(null);
+
+  const login = (email) => {
+    setLoading(true);
+    setTimeout(() => {
+      setUser({ email, name: email.split('@')[0] });
+      loadUserData();
+      setView('dashboard');
+      setLoading(false);
+    }, 1200);
+  };
+
+  const loadUserData = () => {
+    setFinancialData({
+      currentMonth: { totalIncome: 12450, totalExpenses: 8230, netCashFlow: 4220, profitMargin: 33.9 },
+      previousMonth: { totalIncome: 10200, totalExpenses: 7100, netCashFlow: 3100 },
+      historical: [
+        { month: 'Oct', income: 9800, expenses: 6900, net: 2900 },
+        { month: 'Nov', income: 10200, expenses: 7100, net: 3100 },
+        { month: 'Dec', income: 12450, expenses: 8230, net: 4220 }
+      ],
+      categories: [
+        { id: 1, name: 'Client Revenue', type: 'income', amount: 8200, transactions: 12, trend: 18 },
+        { id: 2, name: 'Product Sales', type: 'income', amount: 2850, transactions: 45, trend: 5 },
+        { id: 3, name: 'Consulting', type: 'income', amount: 1400, transactions: 4, trend: -3 },
+        { id: 4, name: 'Software & Tools', type: 'expense', amount: 1890, transactions: 18, trend: 12 },
+        { id: 5, name: 'Marketing', type: 'expense', amount: 2340, transactions: 23, trend: 25 },
+        { id: 6, name: 'Operations', type: 'expense', amount: 2100, transactions: 31, trend: -5 }
+      ],
+      insights: [
+        { id: 1, priority: 'high', title: 'Subscription Stack Bloat', description: 'You have 8 SaaS subscriptions with 4 overlapping features. Consolidation could save significant costs.', impact: '$340/mo savings', action: 'Review & consolidate tools', tags: ['Do Now', 'Quick Win'] },
+        { id: 2, priority: 'medium', title: 'Income Concentration Risk', description: 'Client Revenue accounts for 65% of income. A single client loss could impact cash flow by 40%.', impact: 'High risk', action: 'Diversify client base', tags: ['Watch'] },
+        { id: 3, priority: 'high', title: 'Marketing ROI Spike', description: 'Marketing spend increased 25% but revenue grew 35%. This channel is outperforming.', impact: '+$1,200 potential', action: 'Increase budget', tags: ['Do Now'] }
+      ],
+      uploads: [
+        { id: 1, filename: 'stripe_export_dec.csv', date: '2024-12-28', rows: 89 },
+        { id: 2, filename: 'bank_statement_dec.csv', date: '2024-12-27', rows: 58 }
+      ]
+    });
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLoading(true);
+    setView('processing');
+    setTimeout(() => {
+      loadUserData();
+      setLoading(false);
+      setView('dashboard');
+    }, 3000);
+  };
+
+  if (!user) return <LoginScreen onLogin={login} loading={loading} />;
+  if (view === 'processing') return <ProcessingScreen />;
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          {sidebarOpen && (
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">FinanceAI</span>
+            </div>
+          )}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-700">
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+        <nav className="flex-1 p-4 space-y-2">
+          <NavItem icon={BarChart3} label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} collapsed={!sidebarOpen} />
+          <NavItem icon={Upload} label="Upload Data" active={view === 'upload'} onClick={() => setView('upload')} collapsed={!sidebarOpen} />
+          <NavItem icon={Target} label="Insights" active={view === 'insights'} onClick={() => setView('insights')} collapsed={!sidebarOpen} />
+          <NavItem icon={FileText} label="History" active={view === 'history'} onClick={() => setView('history')} collapsed={!sidebarOpen} />
+        </nav>
+        <div className="p-4 border-t border-gray-200">
+          <NavItem icon={LogOut} label="Logout" onClick={() => { setUser(null); setView('login'); }} collapsed={!sidebarOpen} />
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto">
+        <header className="bg-white border-b border-gray-200 px-8 py-4">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {view === 'dashboard' && 'Financial Dashboard'}
+            {view === 'upload' && 'Upload Data'}
+            {view === 'insights' && 'AI Insights'}
+            {view === 'history' && 'Historical Data'}
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">Welcome back, {user.name}</p>
+        </header>
+
+        <div className="p-8">
+          {view === 'dashboard' && <DashboardView data={financialData} />}
+          {view === 'upload' && <UploadView onUpload={handleFileUpload} uploads={financialData?.uploads || []} />}
+          {view === 'insights' && <InsightsView insights={financialData?.insights || []} />}
+          {view === 'history' && <HistoryView data={financialData} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function NavItem({ icon: Icon, label, active, onClick, collapsed }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${active ? 'bg-indigo-50 text-indigo-600' : 'text-gray-700 hover:bg-gray-100'}`}>
+      <Icon className="w-5 h-5 flex-shrink-0" />
+      {!collapsed && <span className="font-medium">{label}</span>}
+    </button>
+  );
+}
+
+function LoginScreen({ onLogin, loading }) {
+  const [email, setEmail] = useState('');
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-4">
+            <Zap className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">FinanceAI</h1>
+          <p className="text-gray-600">AI-powered financial intelligence for modern businesses</p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input type="password" placeholder="••••••••" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+          </div>
+          <button onClick={() => onLogin(email || 'demo@financeai.com')} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50">
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm text-gray-600">
+          Don't have an account? <button className="text-indigo-600 font-semibold hover:text-indigo-700">Start Free Trial</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProcessingScreen() {
+  const [stage, setStage] = useState(0);
+  const stages = [
+    { label: 'Reading file...', icon: FileText },
+    { label: 'Detecting columns...', icon: Search },
+    { label: 'Categorizing transactions...', icon: Filter },
+    { label: 'Learning patterns...', icon: Zap },
+    { label: 'Generating insights...', icon: Target }
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStage(s => (s < stages.length - 1 ? s + 1 : s));
+    }, 600);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-lg w-full">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-6 animate-pulse">
+            <Zap className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Processing Your Data</h2>
+          <p className="text-gray-600">AI is analyzing your financial data...</p>
+        </div>
+
+        <div className="space-y-4">
+          {stages.map((s, idx) => {
+            const Icon = s.icon;
+            const isActive = idx === stage;
+            const isComplete = idx < stage;
+
+            return (
+              <div key={idx} className={`flex items-center space-x-4 p-4 rounded-lg transition-all ${isActive ? 'bg-indigo-50 border-2 border-indigo-200' : isComplete ? 'bg-green-50' : 'bg-gray-50'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isActive ? 'bg-indigo-600' : isComplete ? 'bg-green-600' : 'bg-gray-300'}`}>
+                  {isComplete ? <CheckCircle className="w-6 h-6 text-white" /> : <Icon className="w-5 h-5 text-white" />}
+                </div>
+                <span className={`font-medium ${isActive ? 'text-indigo-900' : isComplete ? 'text-green-900' : 'text-gray-500'}`}>{s.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ data }) {
+  if (!data) return null;
+
+  const { currentMonth, previousMonth, historical, categories } = data;
+  const incomeChange = ((currentMonth.totalIncome - previousMonth.totalIncome) / previousMonth.totalIncome * 100).toFixed(1);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard title="Total Income" value={`$${currentMonth.totalIncome.toLocaleString()}`} change={incomeChange} icon={TrendingUp} color="emerald" />
+        <MetricCard title="Total Expenses" value={`$${currentMonth.totalExpenses.toLocaleString()}`} icon={TrendingDown} color="red" />
+        <MetricCard title="Net Cash Flow" value={`$${currentMonth.netCashFlow.toLocaleString()}`} icon={BarChart3} color="blue" />
+        <MetricCard title="Profit Margin" value={`${currentMonth.profitMargin}%`} icon={PieChart} color="purple" />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+          <Calendar className="w-5 h-5 mr-2 text-indigo-600" />
+          3-Month Cash Flow Trend
+        </h3>
+        <div className="h-64 flex items-end justify-between space-x-4">
+          {historical.map((month, idx) => (
+            <div key={idx} className="flex-1 flex flex-col items-center">
+              <div className="w-full space-y-2 mb-3">
+                <div className="relative w-full bg-gray-100 rounded-t-lg" style={{ height: `${(month.income / 15000) * 180}px` }}>
+                  <div className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg h-full"></div>
+                </div>
+                <div className="relative w-full bg-gray-100 rounded-t-lg" style={{ height: `${(month.expenses / 15000) * 180}px` }}>
+                  <div className="absolute bottom-0 w-full bg-gradient-to-t from-red-500 to-red-400 rounded-t-lg h-full"></div>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-gray-900">{month.month}</div>
+                <div className="text-xs text-emerald-600 font-semibold">${(month.income / 1000).toFixed(1)}k</div>
+                <div className="text-xs text-red-600 font-semibold">${(month.expenses / 1000).toFixed(1)}k</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CategoryBreakdown title="Income Sources" categories={categories.filter(c => c.type === 'income')} type="income" />
+        <CategoryBreakdown title="Expense Categories" categories={categories.filter(c => c.type === 'expense')} type="expense" />
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, change, icon: Icon, color }) {
+  const colors = { emerald: 'from-emerald-500 to-green-500', red: 'from-red-500 to-orange-500', blue: 'from-blue-500 to-indigo-500', purple: 'from-purple-500 to-pink-500' };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm font-medium text-gray-600">{title}</span>
+        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors[color]} flex items-center justify-center`}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+      </div>
+      <div className="text-3xl font-bold text-gray-900">{value}</div>
+      {change && <div className="text-sm font-semibold text-emerald-600 mt-2">↑ {change}% vs last month</div>}
+    </div>
+  );
+}
+
+function CategoryBreakdown({ title, categories, type }) {
+  const total = categories.reduce((sum, c) => sum + c.amount, 0);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h3 className="text-lg font-bold text-gray-900 mb-4">{title}</h3>
+      <div className="space-y-4">
+        {categories.map(cat => (
+          <div key={cat.id}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">{cat.name}</span>
+              <div className="text-sm font-bold text-gray-900">${cat.amount.toLocaleString()}</div>
+            </div>
+            <div className="relative h-2 bg-gray-100 rounded-full">
+              <div className={`absolute top-0 left-0 h-full rounded-full ${type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${(cat.amount / total) * 100}%` }}></div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">{cat.transactions} transactions</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UploadView({ onUpload, uploads }) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mb-4">
+            <Upload className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Financial Data</h2>
+          <p className="text-gray-600">CSV from Stripe, PayPal, Razorpay, or bank exports</p>
+        </div>
+
+        <div className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-indigo-400 transition-all">
+          <input type="file" accept=".csv,.xlsx,.xls" onChange={onUpload} className="hidden" id="file-upload" />
+          <label htmlFor="file-upload" className="cursor-pointer">
+            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-lg font-semibold text-gray-700 mb-2">Drop file or click to browse</p>
+            <p className="text-sm text-gray-500">CSV, Excel supported</p>
+          </label>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Uploads</h3>
+        <div className="space-y-3">
+          {uploads.map(upload => (
+            <div key={upload.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-gray-400" />
+                <div>
+                  <div className="font-medium text-gray-900">{upload.filename}</div>
+                  <div className="text-xs text-gray-500">{upload.rows} rows • {upload.date}</div>
+                </div>
+              </div>
+              <CheckCircle className="w-5 h-5 text-emerald-500" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsightsView({ insights }) {
+  return (
+    <div className="space-y-4">
+      {insights.map(insight => (
+        <div key={insight.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{insight.title}</h3>
+              <p className="text-gray-700 mb-3">{insight.description}</p>
+              <div className="flex items-center space-x-3">
+                <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-semibold">{insight.impact}</div>
+                {insight.tags.map((tag, idx) => (
+                  <div key={idx} className={`px-3 py-1 rounded-full text-xs font-semibold ${tag === 'Do Now' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{tag}</div>
+                ))}
+              </div>
+            </div>
+            <AlertTriangle className={`w-6 h-6 ${insight.priority === 'high' ? 'text-red-500' : 'text-yellow-500'}`} />
+          </div>
+          <div className="pt-4 border-t border-gray-200">
+            <div className="text-sm font-semibold text-gray-700">Action: {insight.action}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HistoryView({ data }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h2 className="text-xl font-bold text-gray-900 mb-6">Historical Comparisons</h2>
+      <div className="space-y-4">
+        {data?.historical.map((month, idx) => (
+          <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="font-semibold text-gray-900">{month.month} 2024</div>
+            <div className="flex items-center space-x-6">
+              <div>
+                <div className="text-xs text-gray-600">Income</div>
+                <div className="text-sm font-bold text-emerald-600">${month.income.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-600">Expenses</div>
+                <div className="text-sm font-bold text-red-600">${month.expenses.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-600">Net</div>
+                <div className="text-sm font-bold text-blue-600">${month.net.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
